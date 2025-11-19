@@ -1,41 +1,12 @@
-from argparse import ArgumentParser
-from argparse import Namespace
 from pathlib import Path
 import uuid
 
 from loguru import logger
+from omegaconf import DictConfig
 
 from mhpy.utils.subprocess import run_cmd
 
 TEMPLATE_DIR = Path(__file__).parent.parent / "templates"
-PYTHON_SUBMODULES = ["data", "train", "models", "utils"]
-MHPY_URL = "https://github.com/NikitaGordia/mhpy.git"
-UV_TIMEOUT = 100000
-PYTHON_VERSION = "3.12"
-UV_PACKAGES = [
-    "dvc",
-    "ruff",
-    "pre-commit",
-    "wandb",
-    "torch",
-    "numpy",
-    "scikit-learn",
-    "ipython",
-    "jupyter",
-    "tqdm",
-    "matplotlib",
-    "seaborn",
-    "hydra-core",
-    "omegaconf",
-    "loguru",
-    "pandas",
-    "torcheval",
-    "pytest",
-    "pytest-cov",
-]
-DATA_STATES = ["raw", "interim", "processed"]
-CONFIG_DIRS = ["model", "train", "data", "env", "exp"]
-OTHER_DIRS = ["notebooks", "scripts", "tests"]
 
 
 def create_file_from_template(filepath: Path, template_name: str, replacements: dict | None = None) -> None:
@@ -47,18 +18,6 @@ def create_file_from_template(filepath: Path, template_name: str, replacements: 
     filepath.parent.mkdir(parents=True, exist_ok=True)
     filepath.write_text(content)
     logger.info(f"Created: {filepath}")
-
-
-def register_init_args(subparsers: ArgumentParser) -> None:
-    init_parser = subparsers.add_parser("init", help="Initializes a new ML project in the current directory.")
-
-    init_parser.add_argument(
-        "package_name",
-        type=str,
-        help="The name of the main Python package under 'src/'",
-    )
-
-    init_parser.set_defaults(func=init)
 
 
 def _assert_no_code_leakage(package_name: str) -> None:
@@ -101,17 +60,16 @@ def _git(project_root: Path, remote_url: str) -> None:
         logger.info("Skipping remote configuration.")
 
 
-def _uv(project_root: Path, package_root: Path, package_name: str) -> None:
+def _uv(project_root: Path, package_root: Path, package_name: str, cfg: DictConfig) -> None:
     logger.info("Setting up Python environment with uv...")
-    run_cmd(f"uv init --bare --python={PYTHON_VERSION}", "Failed to initialize uv")
-    run_cmd(f"uv python pin {PYTHON_VERSION}", f"Failed to pin python version: {PYTHON_VERSION}")
+    run_cmd(f"uv init --bare --python={cfg.command.python_version}", "Failed to initialize uv")
+    run_cmd(f"uv python pin {cfg.command.python_version}", f"Failed to pin python version: {cfg.command.python_version}")
 
-    for dir in PYTHON_SUBMODULES:
+    for dir in cfg.command.python_submodules:
         submodule = package_root / dir
         submodule.mkdir(parents=True, exist_ok=True)
         (submodule / "__init__.py").touch()
 
-    (package_root / "config").mkdir(parents=True, exist_ok=True)
     (package_root / "__init__.py").touch()
     logger.info(f"Created src structure at: {project_root / 'src'}")
 
@@ -122,24 +80,24 @@ def _uv(project_root: Path, package_root: Path, package_name: str) -> None:
         f.write(pyproject_append_content)
     logger.info("Updated: pyproject.toml")
 
-    packages = f"dvc pre-commit {' '.join(UV_PACKAGES)}"
+    packages = f"dvc pre-commit {' '.join(cfg.command.uv.packages)}"
     run_cmd(
-        f"export UV_HTTP_TIMEOUT={UV_TIMEOUT} && uv add {packages}",
+        f"export UV_HTTP_TIMEOUT={cfg.command.uv.timeout} && uv add {packages}",
         "Failed to install Python packages",
     )
-    run_cmd(f"uv add {MHPY_URL}", "Failed at adding mhpy library as python package")
+    run_cmd(f"uv add {cfg.command.mhpy_url}", "Failed at adding mhpy library as python package")
 
     run_cmd("uv pip install -e .", "Failed to install project in editable mode")
     logger.info("✅ Virtual environment created and project installed.")
     logger.info("Run 'source .venv/bin/activate' to activate it.")
 
 
-def _dvc(project_root: Path) -> None:
+def _dvc(project_root: Path, cfg: DictConfig) -> None:
     logger.info("Initializing DVC...")
     run_cmd("dvc init", "Failed to initialize DVC")
     run_cmd("dvc config core.autostage true", "Failed to set DVC autostage")
 
-    for state in DATA_STATES:
+    for state in cfg.command.data_states:
         (project_root / "data" / state).mkdir(parents=True, exist_ok=True)
     (project_root / ".local_dvc_storage").mkdir(exist_ok=True)
 
@@ -167,12 +125,12 @@ def _makefile(project_root: Path, package_name: str) -> None:
     create_file_from_template(project_root / "Makefile", "Makefile.tpl", {"PACKAGE_NAME": package_name})
 
 
-def _hydra_configs(package_root: Path, package_name: str) -> None:
+def _hydra_configs(package_root: Path, package_name: str, cfg: DictConfig) -> None:
     logger.info("Creating default hydra configs...")
-    create_file_from_template(package_root / "config" / "config.yaml", "hydra_config.tpl")
-    for dir in CONFIG_DIRS:
-        (package_root / "config" / dir).mkdir(exist_ok=True)
-        (package_root / "config" / dir / "default.yaml").touch()
+    create_file_from_template(package_root / "conf" / "config.yaml", "hydra_config.tpl")
+    for dir in cfg.command.config_dirs:
+        (package_root / "conf" / dir).mkdir(exist_ok=True)
+        (package_root / "conf" / dir / "default.yaml").touch()
 
     create_file_from_template(
         package_root / "train" / "train.py",
@@ -184,11 +142,14 @@ def _hydra_configs(package_root: Path, package_name: str) -> None:
 def _tests(project_root: Path) -> None:
     logger.info("Creating tests...")
     create_file_from_template(project_root / "pytest.ini", "pytest.tpl")
+    tests_dir = project_root / "tests"
+    tests_dir.mkdir(exist_ok=True, parents=True)
+    (tests_dir / "__init__.py").touch()
 
 
-def _other_dirs(project_root: Path) -> None:
+def _other_dirs(project_root: Path, cfg: DictConfig) -> None:
     logger.info("Creating remaining directories...")
-    for dir in OTHER_DIRS:
+    for dir in cfg.command.other_dirs:
         (project_root / dir).mkdir(exist_ok=True)
 
 
@@ -209,8 +170,8 @@ def _print_summary() -> None:
     logger.info("2. Log in to W&B: wandb login")
 
 
-def init(args: Namespace) -> None:
-    package_name = args.package_name
+def init(cfg: DictConfig) -> None:
+    package_name = cfg.command.package_name
     project_root = Path.cwd()
     package_root = project_root / "src" / package_name
 
@@ -218,14 +179,14 @@ def init(args: Namespace) -> None:
 
     logger.info(f"🚀 Starting new ML project '{package_name}'...")
     _git(project_root, info["remote_url"])
-    _uv(project_root, package_root, package_name)
-    _dvc(project_root)
+    _uv(project_root, package_root, package_name, cfg)
+    _dvc(project_root, cfg)
     _wandb(project_root)
     _pre_commit(project_root)
     _makefile(project_root, package_name)
-    _hydra_configs(package_root, package_name)
+    _hydra_configs(package_root, package_name, cfg)
     _tests(project_root)
-    _other_dirs(project_root)
+    _other_dirs(project_root, cfg)
     _final_commit()
 
     _print_summary()
