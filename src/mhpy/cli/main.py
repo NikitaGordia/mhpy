@@ -1,20 +1,18 @@
-import argparse
 import sys
 
-from mhpy.cli.commands.initialize import register_init_args
+import hydra
+from omegaconf import DictConfig
+
+from mhpy.cli.commands.initialize import init
 from mhpy.utils.common import configure_logger
 
 
-def main() -> None:
+@hydra.main(version_base=None, config_path="config", config_name="config")
+def main(cfg: DictConfig) -> None:
     configure_logger(save_logs=False)
-    parser = argparse.ArgumentParser(prog="mhpy", description="A helper CLI for automating ML project setup.")
-
-    register_init_args(parser.add_subparsers(dest="command", required=True))
-
-    args = parser.parse_args()
 
     try:
-        args.func(args)
+        init(cfg)
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
         sys.exit(1)

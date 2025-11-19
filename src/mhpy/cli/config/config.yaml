@@ -1,0 +1,10 @@
+defaults:
+  - command: init
+  - _self_
+
+hydra:
+  run:
+    dir: .
+  job:
+    chdir: false
+

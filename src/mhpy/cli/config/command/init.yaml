@@ -1,0 +1,51 @@
+package_name: ???
+
+python_version: "3.12"
+
+python_submodules:
+  - data
+  - train
+  - models
+  - utils
+
+uv:
+  timeout: 100000
+  packages:
+    - dvc
+    - ruff
+    - pre-commit
+    - wandb
+    - torch
+    - numpy
+    - scikit-learn
+    - ipython
+    - jupyter
+    - tqdm
+    - matplotlib
+    - seaborn
+    - hydra-core
+    - omegaconf
+    - loguru
+    - pandas
+    - torcheval
+    - pytest
+    - pytest-cov
+
+mhpy_url: "https://github.com/NikitaGordia/mhpy.git"
+
+data_states:
+  - raw
+  - interim
+  - processed
+
+config_dirs:
+  - model
+  - train
+  - data
+  - env
+  - exp
+
+other_dirs:
+  - notebooks
+  - scripts
+
