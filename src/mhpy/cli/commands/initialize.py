@@ -8,6 +8,33 @@ from loguru import logger
 from mhpy.utils.subprocess import run_cmd
 
 TEMPLATE_DIR = Path(__file__).parent.parent / "templates"
+PYTHON_SUBMODULES = ["data", "train", "models", "utils"]
+MHPY_URL = "https://github.com/NikitaGordia/mhpy.git"
+UV_TIMEOUT = 100000
+UV_PACKAGES = [
+    "dvc",
+    "ruff",
+    "pre-commit",
+    "wandb",
+    "torch",
+    "numpy",
+    "scikit-learn",
+    "ipython",
+    "jupyter",
+    "tqdm",
+    "matplotlib",
+    "seaborn",
+    "hydra-core",
+    "omegaconf",
+    "loguru",
+    "pandas",
+    "torcheval",
+    "pytest",
+    "pytest-cov",
+]
+DATA_STATES = ["raw", "interim", "processed"]
+CONFIG_DIRS = ["model", "train", "data", "env", "exp"]
+OTHER_DIRS = ["notebooks", "scripts", "tests"]
 
 
 def create_file_from_template(filepath: Path, template_name: str, replacements: dict | None = None) -> None:
@@ -48,7 +75,6 @@ def _assert_no_code_leakage(package_name: str) -> None:
 def _prompting(package_game: str) -> dict:
     _assert_no_code_leakage(package_game)
 
-    logger.info("\nConfiguring remote repository...")
     remote_url = input("🔗 Enter remote repository URL (Enter to skip): ").strip()
 
     return {"remote_url": remote_url}
@@ -78,8 +104,11 @@ def _uv(project_root: Path, package_root: Path, package_name: str) -> None:
     logger.info("Setting up Python environment with uv...")
     run_cmd("uv init", "Failed to initialize uv")
 
-    (package_root / "data").mkdir(parents=True, exist_ok=True)
-    (package_root / "train").mkdir(parents=True, exist_ok=True)
+    for dir in PYTHON_SUBMODULES:
+        submodule = package_root / dir
+        submodule.mkdir(parents=True, exist_ok=True)
+        (submodule / "__init__.py").touch()
+
     (package_root / "config").mkdir(parents=True, exist_ok=True)
     (package_root / "__init__.py").touch()
     logger.info(f"Created src structure at: {project_root / 'src'}")
@@ -91,13 +120,12 @@ def _uv(project_root: Path, package_root: Path, package_name: str) -> None:
         f.write(pyproject_append_content)
     logger.info("Updated: pyproject.toml")
 
-    packages = (
-        "dvc pre-commit ruff wandb torch numpy scikit-learn ipython jupyter tqdm matplotlib seaborn hydra-core omegaconf loguru pandas torcheval"
-    )
+    packages = f"dvc pre-commit {' '.join(UV_PACKAGES)}"
     run_cmd(
-        f"export UV_HTTP_TIMEOUT=100000 && uv add {packages}",
+        f"export UV_HTTP_TIMEOUT={UV_TIMEOUT} && uv add {packages}",
         "Failed to install Python packages",
     )
+    run_cmd(f"uv add {MHPY_URL}", "Failed at adding mhpy library as python package")
 
     run_cmd("uv pip install -e .", "Failed to install project in editable mode")
     logger.info("✅ Virtual environment created and project installed.")
@@ -109,9 +137,8 @@ def _dvc(project_root: Path) -> None:
     run_cmd("dvc init", "Failed to initialize DVC")
     run_cmd("dvc config core.autostage true", "Failed to set DVC autostage")
 
-    (project_root / "data" / "raw").mkdir(parents=True, exist_ok=True)
-    (project_root / "data" / "interim").mkdir(parents=True, exist_ok=True)
-    (project_root / "data" / "processed").mkdir(parents=True, exist_ok=True)
+    for state in DATA_STATES:
+        (project_root / "data" / state).mkdir(parents=True, exist_ok=True)
     (project_root / ".local_dvc_storage").mkdir(exist_ok=True)
 
     run_cmd("dvc remote add local ./.local_dvc_storage", "Failed to add DVC local remote")
@@ -141,15 +168,9 @@ def _makefile(project_root: Path, package_name: str) -> None:
 def _hydra_configs(package_root: Path, package_name: str) -> None:
     logger.info("Creating default hydra configs...")
     create_file_from_template(package_root / "config" / "config.yaml", "hydra_config.tpl")
-    (package_root / "config" / "model").mkdir(exist_ok=True)
-    (package_root / "config" / "train").mkdir(exist_ok=True)
-    (package_root / "config" / "data").mkdir(exist_ok=True)
-    (package_root / "config" / "env").mkdir(exist_ok=True)
-    (package_root / "config" / "exp").mkdir(exist_ok=True)
-    (package_root / "config" / "model" / "default.yaml").touch()
-    (package_root / "config" / "train" / "default.yaml").touch()
-    (package_root / "config" / "data" / "default.yaml").touch()
-    (package_root / "config" / "env" / "default.yaml").touch()
+    for dir in CONFIG_DIRS:
+        (package_root / "config" / dir).mkdir(exist_ok=True)
+        (package_root / "config" / dir / "default.yaml").touch()
 
     create_file_from_template(
         package_root / "train" / "train.py",
@@ -158,11 +179,15 @@ def _hydra_configs(package_root: Path, package_name: str) -> None:
     )
 
 
+def _tests(project_root: Path) -> None:
+    logger.info("Creating tests...")
+    create_file_from_template(project_root / "pytest.ini", "pytest.tpl")
+
+
 def _other_dirs(project_root: Path) -> None:
     logger.info("Creating remaining directories...")
-    (project_root / "notebooks").mkdir(exist_ok=True)
-    (project_root / "scripts").mkdir(exist_ok=True)
-    (project_root / "tests").mkdir(exist_ok=True)
+    for dir in OTHER_DIRS:
+        (project_root / dir).mkdir(exist_ok=True)
 
 
 def _final_commit() -> None:
@@ -175,6 +200,7 @@ def _final_commit() -> None:
 
 
 def _print_summary() -> None:
+    logger.info("\n")
     logger.info("🎉 Project setup complete! 🎉")
     logger.info("Next steps:")
     logger.info("1. Activate the environment: source .venv/bin/activate")
@@ -186,10 +212,9 @@ def init(args: Namespace) -> None:
     project_root = Path.cwd()
     package_root = project_root / "src" / package_name
 
-    logger.info(f"🚀 Starting new ML project '{package_name}'...")
-
     info = _prompting(package_name)
 
+    logger.info(f"🚀 Starting new ML project '{package_name}'...")
     _git(project_root, info["remote_url"])
     _uv(project_root, package_root, package_name)
     _dvc(project_root)
@@ -197,6 +222,7 @@ def init(args: Namespace) -> None:
     _pre_commit(project_root)
     _makefile(project_root, package_name)
     _hydra_configs(package_root, package_name)
+    _tests(project_root)
     _other_dirs(project_root)
     _final_commit()
 

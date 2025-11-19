@@ -45,6 +45,23 @@ multirun/
 .ruff_cache/
 .mypy_cache/
 
+# Pytest internal cache (e.g. for --lf "last failed" runs)
+.pytest_cache/
+
+# Coverage reports (SQLite DBs and reports)
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+coverage.json
+
+# Test automation environments (if you use tox/nox)
+.tox/
+.nox/
+
+# Hypothesis (property-based testing cache)
+.hypothesis/
+
 # --- Logs & Outputs ---
 # General logs and generated plots
 *.log

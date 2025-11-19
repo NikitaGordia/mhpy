@@ -2,6 +2,8 @@ from pathlib import Path
 import sys
 import time
 
+import git
+from loguru import logger
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
 from torch.multiprocessing import Queue
@@ -46,3 +48,27 @@ def capture_args(cfg: dict) -> dict:
 
 def config_from_run(run: wandb.Run) -> DictConfig:
     return OmegaConf.create(dict(run.config))
+
+
+def assert_clean_git(repo_path=".", project_name="my_project"):
+    config_dir = Path(f"src/{project_name}/config")
+
+    try:
+        repo = git.Repo(repo_path)
+    except git.InvalidGitRepositoryError:
+        logger.error("This directory is not a Git repository. Skipping check.")
+        return
+
+    def shutdown_process():
+        logger.error("Found dirty code!")
+        sys.exit(1)
+
+    for diff_item in repo.index.diff(None):
+        file_path = Path(diff_item.a_path)
+        if not file_path.is_relative_to(config_dir):
+            shutdown_process()
+
+    for untracked_path_str in repo.untracked_files:
+        file_path = Path(untracked_path_str)
+        if not file_path.is_relative_to(config_dir):
+            shutdown_process()
