@@ -1,4 +1,5 @@
 from pathlib import Path
+import shutil
 import uuid
 
 from loguru import logger
@@ -166,6 +167,14 @@ def _final_commit() -> None:
     )
 
 
+def _cleanup(project_root: Path) -> None:
+    for item in project_root.iterdir():
+        if item.is_dir():
+            shutil.rmtree(item)
+        else:
+            item.unlink()
+
+
 def _print_summary() -> None:
     logger.info("\n")
     logger.info("🎉 Project setup complete! 🎉")
@@ -182,16 +191,21 @@ def init(cfg: DictConfig) -> None:
     info = _prompting(package_name, cfg)
 
     logger.info(f"🚀 Starting new ML project '{package_name}'...")
-    _git(project_root, info["remote_url"])
-    _uv(project_root, package_root, package_name, cfg)
-    _dvc(project_root, cfg)
-    _wandb(project_root)
-    _pre_commit(project_root)
-    _makefile(project_root, package_name)
-    _hydra_configs(package_root, cfg)
-    _tests(project_root)
-    _other_dirs(project_root, cfg)
-    _py_templates(package_root, package_name)
-    _final_commit()
 
-    _print_summary()
+    try:
+        _git(project_root, info["remote_url"])
+        _uv(project_root, package_root, package_name, cfg)
+        _dvc(project_root, cfg)
+        _wandb(project_root)
+        _pre_commit(project_root)
+        _makefile(project_root, package_name)
+        _hydra_configs(package_root, cfg)
+        _tests(project_root)
+        _other_dirs(project_root, cfg)
+        _py_templates(package_root, package_name)
+        _final_commit()
+        _print_summary()
+    except Exception as e:
+        logger.error(f"Error: {e}")
+        _cleanup(project_root)
+        logger.info(f"All changes in {project_root} have been removed.")
