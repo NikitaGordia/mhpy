@@ -9,7 +9,8 @@ from mhpy.utils.common import configure_logger
 def main(cfg: DictConfig) -> None:
     configure_logger(save_logs=False)
 
-    init(cfg)
+    if cfg.command.name == "init":
+        init(cfg.command)
 
 
 if __name__ == "__main__":

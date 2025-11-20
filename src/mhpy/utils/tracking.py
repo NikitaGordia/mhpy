@@ -35,7 +35,7 @@ def get_forked_run(run: wandb.Run, id: int) -> wandb.Run:
     return get_wandb_run(str(path))
 
 
-def track_permormance(run: wandb.Run, it: int, total_runtime: float, step_timer: Timer, cpu_timer: Timer, queue: Queue):
+def track_performance(run: wandb.Run, it: int, total_runtime: float, step_timer: Timer, cpu_timer: Timer, queue: Queue):
     run.log(
         {
             "performance/step_runtime": step_timer.interval,
@@ -56,8 +56,12 @@ def config_from_run(run: wandb.Run) -> DictConfig:
     return OmegaConf.create(dict(run.config))
 
 
-def assert_clean_git(repo_path=".", project_name="my_project"):
-    config_dir = Path(f"src/{project_name}/config")
+def _path_is_relative(path: Path, parents: list[Path]):
+    return any([path.is_relative_to(parent) for parent in parents])
+
+
+def assert_clean_git(repo_path=".", project_name="my_project", ignore_submodules=["config"]):
+    ignore_paths = [Path(f"src/{project_name}/{submodule}") for submodule in ignore_submodules]
 
     try:
         repo = git.Repo(repo_path)
@@ -67,10 +71,10 @@ def assert_clean_git(repo_path=".", project_name="my_project"):
 
     for diff_item in repo.index.diff(None):
         file_path = Path(diff_item.a_path)
-        if not file_path.is_relative_to(config_dir):
+        if not _path_is_relative(file_path, ignore_paths):
             raise GitStatusError()
 
     for untracked_path_str in repo.untracked_files:
         file_path = Path(untracked_path_str)
-        if not file_path.is_relative_to(config_dir):
+        if not _path_is_relative(file_path, ignore_paths):
             raise GitStatusError()

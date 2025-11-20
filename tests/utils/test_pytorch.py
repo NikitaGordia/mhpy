@@ -1,65 +1,57 @@
-from unittest.mock import patch
-
 import torch.nn as nn
 
 from mhpy.utils.pytorch import get_model_size
 
 
 class TestGetModelSize:
-    @patch("mhpy.utils.pytorch.logger")
-    def test_get_model_size_simple_model(self, mock_logger):
-        # Parameters: 10 * 5 (weights) + 5 (bias) = 55 parameters
+    def test_get_model_size_simple_model(self):
         model = nn.Linear(10, 5)
 
-        param_count = get_model_size(model)
+        param_count, size_mb = get_model_size(model)
 
         assert param_count == 55
+        assert size_mb > 0
 
-    @patch("mhpy.utils.pytorch.logger")
-    def test_get_model_size_sequential_model(self, mock_logger):
-        """Test get_model_size with a sequential model."""
+    def test_get_model_size_sequential_model(self):
         model = nn.Sequential(
-            nn.Linear(10, 20),  # 10*20 + 20 = 220
+            nn.Linear(10, 20),
             nn.ReLU(),
-            nn.Linear(20, 5),  # 20*5 + 5 = 105
+            nn.Linear(20, 5),
         )
 
-        param_count = get_model_size(model)
+        param_count, size_mb = get_model_size(model)
 
         assert param_count == 325
+        assert size_mb > 0
 
-    @patch("mhpy.utils.pytorch.logger")
-    def test_get_model_size_conv_model(self, mock_logger):
+    def test_get_model_size_conv_model(self):
         model = nn.Conv2d(3, 16, kernel_size=3, padding=1)
 
-        param_count = get_model_size(model)
+        param_count, size_mb = get_model_size(model)
 
         assert param_count == 448
+        assert size_mb > 0
 
-    @patch("mhpy.utils.pytorch.logger")
-    def test_get_model_size_model_with_buffers(self, mock_logger):
+    def test_get_model_size_model_with_buffers(self):
         model = nn.Sequential(
             nn.Linear(10, 10),
             nn.BatchNorm1d(10),
         )
 
-        param_count = get_model_size(model)
+        param_count, size_mb = get_model_size(model)
 
-        # Linear: 10*10 + 10 = 110
-        # BatchNorm: 10 (weight) + 10 (bias) = 20
-        # Total parameters: 130
         assert param_count == 130
+        assert size_mb > 0
 
-    @patch("mhpy.utils.pytorch.logger")
-    def test_get_model_size_empty_model(self, mock_logger):
+    def test_get_model_size_empty_model(self):
         model = nn.Sequential()
 
-        param_count = get_model_size(model)
+        param_count, size_mb = get_model_size(model)
 
         assert param_count == 0
+        assert size_mb == 0
 
-    @patch("mhpy.utils.pytorch.logger")
-    def test_get_model_size_custom_model(self, mock_logger):
+    def test_get_model_size_custom_model(self):
         class CustomModel(nn.Module):
             def __init__(self):
                 super().__init__()
@@ -72,23 +64,22 @@ class TestGetModelSize:
                 return x
 
         model = CustomModel()
-        param_count = get_model_size(model)
+        param_count, size_mb = get_model_size(model)
 
-        # fc1: 5*10 + 10 = 60
-        # fc2: 10*2 + 2 = 22
-        # Total: 82
         assert param_count == 82
+        assert size_mb > 0
 
-    @patch("mhpy.utils.pytorch.logger")
-    def test_get_model_size_different_dtypes(self, mock_logger):
-        model = nn.Linear(10, 5).half()
+    def test_get_model_size_different_dtypes(self):
+        model_float32 = nn.Linear(10, 5)
+        model_float16 = nn.Linear(10, 5).half()
 
-        param_count = get_model_size(model)
+        param_count_32, size_mb_32 = get_model_size(model_float32)
+        param_count_16, size_mb_16 = get_model_size(model_float16)
 
-        assert param_count == 55
+        assert param_count_32 == param_count_16 == 55
+        assert size_mb_32 > size_mb_16
 
-    @patch("mhpy.utils.pytorch.logger")
-    def test_get_model_size_large_model(self, mock_logger):
+    def test_get_model_size_large_model(self):
         model = nn.Sequential(
             nn.Linear(1000, 500),
             nn.ReLU(),
@@ -97,10 +88,25 @@ class TestGetModelSize:
             nn.Linear(250, 10),
         )
 
-        param_count = get_model_size(model)
+        param_count, size_mb = get_model_size(model)
 
-        # Layer 1: 1000*500 + 500 = 500,500
-        # Layer 2: 500*250 + 250 = 125,250
-        # Layer 3: 250*10 + 10 = 2,510
-        # Total: 628,260
         assert param_count == 628_260
+        assert size_mb > 0
+
+    def test_get_model_size_returns_tuple(self):
+        model = nn.Linear(5, 3)
+
+        result = get_model_size(model)
+
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+        assert isinstance(result[0], int)
+        assert isinstance(result[1], float)
+
+    def test_get_model_size_buffer_contribution(self):
+        model = nn.BatchNorm1d(10)
+
+        param_count, size_mb = get_model_size(model)
+
+        assert param_count == 20
+        assert size_mb > 0

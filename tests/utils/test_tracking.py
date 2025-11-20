@@ -12,7 +12,7 @@ from mhpy.utils.tracking import capture_args
 from mhpy.utils.tracking import config_from_run
 from mhpy.utils.tracking import get_forked_run
 from mhpy.utils.tracking import get_wandb_run
-from mhpy.utils.tracking import track_permormance
+from mhpy.utils.tracking import track_performance
 
 
 class TestTimer:
@@ -105,7 +105,7 @@ class TestGetForkedRun:
 
 
 class TestTrackPerformance:
-    def test_track_permormance_basic(self):
+    def test_track_performance_basic(self):
         mock_run = MagicMock()
         mock_queue = MagicMock()
         mock_queue.qsize.return_value = 5
@@ -116,7 +116,7 @@ class TestTrackPerformance:
         cpu_timer = MagicMock()
         cpu_timer.interval = 0.05
 
-        track_permormance(mock_run, 100, 10.5, step_timer, cpu_timer, mock_queue)
+        track_performance(mock_run, 100, 10.5, step_timer, cpu_timer, mock_queue)
 
         mock_run.log.assert_called_once()
 
@@ -310,3 +310,66 @@ class TestAssertCleanGit:
 
         with pytest.raises(GitStatusError):
             assert_clean_git(repo_path=".", project_name="test_project")
+
+    @patch("mhpy.utils.tracking.git.Repo")
+    def test_assert_clean_git_custom_ignore_submodules(self, mock_repo_class):
+        mock_repo = MagicMock()
+
+        mock_diff_item = MagicMock()
+        mock_diff_item.a_path = "src/test_project/data/dataset.py"
+        mock_repo.index.diff.return_value = [mock_diff_item]
+        mock_repo.untracked_files = []
+        mock_repo_class.return_value = mock_repo
+
+        assert_clean_git(repo_path=".", project_name="test_project", ignore_submodules=["config", "data"])
+
+    @patch("mhpy.utils.tracking.git.Repo")
+    def test_assert_clean_git_custom_ignore_submodules_violation(self, mock_repo_class):
+        mock_repo = MagicMock()
+
+        mock_diff_item = MagicMock()
+        mock_diff_item.a_path = "src/test_project/models/model.py"
+        mock_repo.index.diff.return_value = [mock_diff_item]
+        mock_repo.untracked_files = []
+        mock_repo_class.return_value = mock_repo
+
+        with pytest.raises(GitStatusError):
+            assert_clean_git(repo_path=".", project_name="test_project", ignore_submodules=["config", "data"])
+
+    @patch("mhpy.utils.tracking.git.Repo")
+    def test_assert_clean_git_empty_ignore_submodules(self, mock_repo_class):
+        mock_repo = MagicMock()
+
+        mock_diff_item = MagicMock()
+        mock_diff_item.a_path = "src/test_project/config/exp.yaml"
+        mock_repo.index.diff.return_value = [mock_diff_item]
+        mock_repo.untracked_files = []
+        mock_repo_class.return_value = mock_repo
+
+        with pytest.raises(GitStatusError):
+            assert_clean_git(repo_path=".", project_name="test_project", ignore_submodules=[])
+
+    @patch("mhpy.utils.tracking.git.Repo")
+    def test_assert_clean_git_multiple_ignore_submodules(self, mock_repo_class):
+        mock_repo = MagicMock()
+
+        mock_diff_item1 = MagicMock()
+        mock_diff_item1.a_path = "src/test_project/config/exp.yaml"
+        mock_diff_item2 = MagicMock()
+        mock_diff_item2.a_path = "src/test_project/data/loader.py"
+        mock_diff_item3 = MagicMock()
+        mock_diff_item3.a_path = "src/test_project/utils/helper.py"
+        mock_repo.index.diff.return_value = [mock_diff_item1, mock_diff_item2, mock_diff_item3]
+        mock_repo.untracked_files = []
+        mock_repo_class.return_value = mock_repo
+
+        assert_clean_git(repo_path=".", project_name="test_project", ignore_submodules=["config", "data", "utils"])
+
+    @patch("mhpy.utils.tracking.git.Repo")
+    def test_assert_clean_git_untracked_with_custom_ignore(self, mock_repo_class):
+        mock_repo = MagicMock()
+        mock_repo.index.diff.return_value = []
+        mock_repo.untracked_files = ["src/test_project/scripts/new_script.py"]
+        mock_repo_class.return_value = mock_repo
+
+        assert_clean_git(repo_path=".", project_name="test_project", ignore_submodules=["config", "scripts"])

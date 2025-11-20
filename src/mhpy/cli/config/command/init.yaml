@@ -2,6 +2,8 @@ package_name: ???
 
 python_version: "3.12"
 
+name: init
+
 python_submodules:
   - data
   - train
@@ -38,12 +40,14 @@ data_states:
   - interim
   - processed
 
-config_dirs:
-  - model
-  - train
-  - data
-  - env
-  - exp
+hydra:
+  submodule: conf
+  configs:
+    - model
+    - train
+    - data
+    - env
+    - exp
 
 other_dirs:
   - notebooks

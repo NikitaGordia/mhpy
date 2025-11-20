@@ -62,10 +62,10 @@ def _git(project_root: Path, remote_url: str) -> None:
 
 def _uv(project_root: Path, package_root: Path, package_name: str, cfg: DictConfig) -> None:
     logger.info("Setting up Python environment with uv...")
-    run_cmd(f"uv init --bare --python={cfg.command.python_version}", "Failed to initialize uv")
-    run_cmd(f"uv python pin {cfg.command.python_version}", f"Failed to pin python version: {cfg.command.python_version}")
+    run_cmd(f"uv init --bare --python={cfg.python_version}", "Failed to initialize uv")
+    run_cmd(f"uv python pin {cfg.python_version}", f"Failed to pin python version: {cfg.python_version}")
 
-    for dir in cfg.command.python_submodules:
+    for dir in cfg.python_submodules:
         submodule = package_root / dir
         submodule.mkdir(parents=True, exist_ok=True)
         (submodule / "__init__.py").touch()
@@ -80,12 +80,12 @@ def _uv(project_root: Path, package_root: Path, package_name: str, cfg: DictConf
         f.write(pyproject_append_content)
     logger.info("Updated: pyproject.toml")
 
-    packages = f"dvc pre-commit {' '.join(cfg.command.uv.packages)}"
+    packages = f"dvc pre-commit {' '.join(cfg.uv.packages)}"
     run_cmd(
-        f"export UV_HTTP_TIMEOUT={cfg.command.uv.timeout} && uv add {packages}",
+        f"export UV_HTTP_TIMEOUT={cfg.uv.timeout} && uv add {packages}",
         "Failed to install Python packages",
     )
-    run_cmd(f"uv add {cfg.command.mhpy_url}", "Failed at adding mhpy library as python package")
+    run_cmd(f"uv add {cfg.mhpy_url}", "Failed at adding mhpy library as python package")
 
     run_cmd("uv pip install -e .", "Failed to install project in editable mode")
     logger.info("✅ Virtual environment created and project installed.")
@@ -97,7 +97,7 @@ def _dvc(project_root: Path, cfg: DictConfig) -> None:
     run_cmd("dvc init", "Failed to initialize DVC")
     run_cmd("dvc config core.autostage true", "Failed to set DVC autostage")
 
-    for state in cfg.command.data_states:
+    for state in cfg.data_states:
         (project_root / "data" / state).mkdir(parents=True, exist_ok=True)
     (project_root / ".local_dvc_storage").mkdir(exist_ok=True)
 
@@ -125,18 +125,13 @@ def _makefile(project_root: Path, package_name: str) -> None:
     create_file_from_template(project_root / "Makefile", "Makefile.tpl", {"PACKAGE_NAME": package_name})
 
 
-def _hydra_configs(package_root: Path, package_name: str, cfg: DictConfig) -> None:
+def _hydra_configs(package_root: Path, cfg: DictConfig) -> None:
     logger.info("Creating default hydra configs...")
-    create_file_from_template(package_root / "conf" / "config.yaml", "hydra_config.tpl")
-    for dir in cfg.command.config_dirs:
-        (package_root / "conf" / dir).mkdir(exist_ok=True)
-        (package_root / "conf" / dir / "default.yaml").touch()
-
-    create_file_from_template(
-        package_root / "train" / "train.py",
-        "train.tpl",
-        {"PACKAGE_NAME": package_name},
-    )
+    hydra_dir = package_root / cfg.hydra.submodule
+    create_file_from_template(hydra_dir / "config.yaml", "hydra_config.tpl")
+    for dir in cfg.hydra.configs:
+        (hydra_dir / dir).mkdir(exist_ok=True)
+        (hydra_dir / dir / "default.yaml").touch()
 
 
 def _tests(project_root: Path) -> None:
@@ -149,8 +144,16 @@ def _tests(project_root: Path) -> None:
 
 def _other_dirs(project_root: Path, cfg: DictConfig) -> None:
     logger.info("Creating remaining directories...")
-    for dir in cfg.command.other_dirs:
+    for dir in cfg.other_dirs:
         (project_root / dir).mkdir(exist_ok=True)
+
+
+def _py_templates(package_root: Path, package_name: str) -> None:
+    create_file_from_template(
+        package_root / "train" / "train.py",
+        "train.tpl",
+        {"PACKAGE_NAME": package_name},
+    )
 
 
 def _final_commit() -> None:
@@ -171,7 +174,7 @@ def _print_summary() -> None:
 
 
 def init(cfg: DictConfig) -> None:
-    package_name = cfg.command.package_name
+    package_name = cfg.package_name
     project_root = Path.cwd()
     package_root = project_root / "src" / package_name
 
@@ -184,9 +187,10 @@ def init(cfg: DictConfig) -> None:
     _wandb(project_root)
     _pre_commit(project_root)
     _makefile(project_root, package_name)
-    _hydra_configs(package_root, package_name, cfg)
+    _hydra_configs(package_root, cfg)
     _tests(project_root)
     _other_dirs(project_root, cfg)
+    _py_templates(package_root, package_name)
     _final_commit()
 
     _print_summary()
