@@ -1,5 +1,4 @@
 import subprocess
-import sys
 
 from loguru import logger
 
@@ -16,5 +15,5 @@ def run_cmd(command: str, error_msg: str) -> None:
             stderr=subprocess.PIPE,
         )
     except subprocess.CalledProcessError as e:
-        logger.error(f"Error - {error_msg}: {e.stderr}")
-        sys.exit(1)
+        logger.error(f"Error - {error_msg}")
+        raise e

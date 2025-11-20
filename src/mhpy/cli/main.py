@@ -1,5 +1,3 @@
-import sys
-
 import hydra
 from omegaconf import DictConfig
 
@@ -11,11 +9,7 @@ from mhpy.utils.common import configure_logger
 def main(cfg: DictConfig) -> None:
     configure_logger(save_logs=False)
 
-    try:
-        init(cfg)
-    except Exception as e:
-        print(f"An unexpected error occurred: {e}")
-        sys.exit(1)
+    init(cfg)
 
 
 if __name__ == "__main__":

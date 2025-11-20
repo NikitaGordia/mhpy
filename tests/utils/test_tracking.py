@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
+from mhpy.utils.tracking import GitStatusError
 from mhpy.utils.tracking import Timer
 from mhpy.utils.tracking import assert_clean_git
 from mhpy.utils.tracking import capture_args
@@ -204,10 +205,8 @@ class TestAssertCleanGit:
 
         assert_clean_git(repo_path=".", project_name="test_project")
 
-    @patch("mhpy.utils.tracking.logger")
-    @patch("mhpy.utils.tracking.sys.exit")
     @patch("mhpy.utils.tracking.git.Repo")
-    def test_assert_clean_git_dirty_code(self, mock_repo_class, mock_exit, mock_logger):
+    def test_assert_clean_git_dirty_code(self, mock_repo_class):
         mock_repo = MagicMock()
 
         mock_diff_item = MagicMock()
@@ -216,10 +215,8 @@ class TestAssertCleanGit:
         mock_repo.untracked_files = []
         mock_repo_class.return_value = mock_repo
 
-        assert_clean_git(repo_path=".", project_name="test_project")
-
-        mock_logger.error.assert_called_once_with("Found dirty code!")
-        mock_exit.assert_called_once_with(1)
+        with pytest.raises(GitStatusError):
+            assert_clean_git(repo_path=".", project_name="test_project")
 
     @patch("mhpy.utils.tracking.git.Repo")
     def test_assert_clean_git_config_changes_allowed(self, mock_repo_class):
@@ -233,19 +230,15 @@ class TestAssertCleanGit:
 
         assert_clean_git(repo_path=".", project_name="test_project")
 
-    @patch("mhpy.utils.tracking.logger")
-    @patch("mhpy.utils.tracking.sys.exit")
     @patch("mhpy.utils.tracking.git.Repo")
-    def test_assert_clean_git_untracked_files(self, mock_repo_class, mock_exit, mock_logger):
+    def test_assert_clean_git_untracked_files(self, mock_repo_class):
         mock_repo = MagicMock()
         mock_repo.index.diff.return_value = []
         mock_repo.untracked_files = ["src/test_project/new_file.py"]
         mock_repo_class.return_value = mock_repo
 
-        assert_clean_git(repo_path=".", project_name="test_project")
-
-        mock_logger.error.assert_called_once_with("Found dirty code!")
-        mock_exit.assert_called_once_with(1)
+        with pytest.raises(GitStatusError):
+            assert_clean_git(repo_path=".", project_name="test_project")
 
     @patch("mhpy.utils.tracking.git.Repo")
     def test_assert_clean_git_untracked_config_allowed(self, mock_repo_class):
@@ -256,13 +249,16 @@ class TestAssertCleanGit:
 
         assert_clean_git(repo_path=".", project_name="test_project")
 
+    @patch("mhpy.utils.tracking.logger")
     @patch("mhpy.utils.tracking.git.Repo")
-    def test_assert_clean_git_invalid_repo(self, mock_repo_class):
+    def test_assert_clean_git_invalid_repo(self, mock_repo_class, mock_logger):
         import git
 
         mock_repo_class.side_effect = git.InvalidGitRepositoryError("This directory is not a Git repository.")
 
         assert_clean_git(repo_path=".", project_name="test_project")
+
+        mock_logger.error.assert_called_once_with("This directory is not a Git repository. Skipping check.")
 
     @patch("mhpy.utils.tracking.git.Repo")
     def test_assert_clean_git_custom_project_name(self, mock_repo_class):
@@ -274,3 +270,43 @@ class TestAssertCleanGit:
         assert_clean_git(repo_path=".", project_name="custom_project")
 
         mock_repo_class.assert_called_once_with(".")
+
+    @patch("mhpy.utils.tracking.git.Repo")
+    def test_assert_clean_git_multiple_dirty_files(self, mock_repo_class):
+        mock_repo = MagicMock()
+
+        mock_diff_item1 = MagicMock()
+        mock_diff_item1.a_path = "src/test_project/main.py"
+        mock_diff_item2 = MagicMock()
+        mock_diff_item2.a_path = "src/test_project/utils.py"
+        mock_repo.index.diff.return_value = [mock_diff_item1, mock_diff_item2]
+        mock_repo.untracked_files = []
+        mock_repo_class.return_value = mock_repo
+
+        with pytest.raises(GitStatusError):
+            assert_clean_git(repo_path=".", project_name="test_project")
+
+    @patch("mhpy.utils.tracking.git.Repo")
+    def test_assert_clean_git_mixed_dirty_and_config(self, mock_repo_class):
+        mock_repo = MagicMock()
+
+        mock_diff_item1 = MagicMock()
+        mock_diff_item1.a_path = "src/test_project/config/exp.yaml"
+        mock_diff_item2 = MagicMock()
+        mock_diff_item2.a_path = "src/test_project/main.py"
+        mock_repo.index.diff.return_value = [mock_diff_item1, mock_diff_item2]
+        mock_repo.untracked_files = []
+        mock_repo_class.return_value = mock_repo
+
+        with pytest.raises(GitStatusError):
+            assert_clean_git(repo_path=".", project_name="test_project")
+
+    @patch("mhpy.utils.tracking.git.Repo")
+    def test_assert_clean_git_untracked_outside_config(self, mock_repo_class):
+        mock_repo = MagicMock()
+        mock_repo.index.diff.return_value = []
+        mock_repo.untracked_files = ["tests/test_new.py", "src/test_project/config/new.yaml"]
+        mock_repo_class.return_value = mock_repo
+
+        with pytest.raises(GitStatusError):
+            assert_clean_git(repo_path=".", project_name="test_project")

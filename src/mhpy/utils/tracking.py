@@ -10,6 +10,12 @@ from torch.multiprocessing import Queue
 import wandb
 
 
+class GitStatusError(Exception):
+    """Raised when the git repository is not in a clean state."""
+
+    pass
+
+
 class Timer:
     def __enter__(self):
         self.start = time.perf_counter()
@@ -59,16 +65,12 @@ def assert_clean_git(repo_path=".", project_name="my_project"):
         logger.error("This directory is not a Git repository. Skipping check.")
         return
 
-    def shutdown_process():
-        logger.error("Found dirty code!")
-        sys.exit(1)
-
     for diff_item in repo.index.diff(None):
         file_path = Path(diff_item.a_path)
         if not file_path.is_relative_to(config_dir):
-            shutdown_process()
+            raise GitStatusError()
 
     for untracked_path_str in repo.untracked_files:
         file_path = Path(untracked_path_str)
         if not file_path.is_relative_to(config_dir):
-            shutdown_process()
+            raise GitStatusError()

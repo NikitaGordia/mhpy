@@ -2,6 +2,8 @@ import subprocess
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
+import pytest
+
 from mhpy.utils.subprocess import run_cmd
 
 
@@ -26,23 +28,16 @@ class TestRunCmd:
 
     @patch("mhpy.utils.subprocess.logger")
     @patch("mhpy.utils.subprocess.subprocess.run")
-    @patch("mhpy.utils.subprocess.sys.exit")
-    def test_run_cmd_failure(self, mock_exit, mock_run, mock_logger):
-        """Test run_cmd with a failing command."""
+    def test_run_cmd_failure(self, mock_run, mock_logger):
         command = "false"
         error_msg = "Command failed"
-        stderr_output = "Error: command not found"
 
-        mock_run.side_effect = subprocess.CalledProcessError(returncode=1, cmd=command, stderr=stderr_output)
+        mock_run.side_effect = subprocess.CalledProcessError(returncode=1, cmd=command, stderr="error output")
 
-        run_cmd(command, error_msg)
+        with pytest.raises(subprocess.CalledProcessError):
+            run_cmd(command, error_msg)
 
-        mock_logger.error.assert_called_once()
-        error_call = str(mock_logger.error.call_args)
-        assert error_msg in error_call
-        assert stderr_output in error_call
-
-        mock_exit.assert_called_once_with(1)
+        mock_logger.error.assert_called_once_with(f"Error - {error_msg}")
 
     @patch("mhpy.utils.subprocess.subprocess.run")
     def test_run_cmd_with_complex_command(self, mock_run):
@@ -58,7 +53,6 @@ class TestRunCmd:
 
     @patch("mhpy.utils.subprocess.subprocess.run")
     def test_run_cmd_shell_true(self, mock_run):
-        """Test that run_cmd uses shell=True."""
         command = "echo test"
         error_msg = "Error"
 
@@ -93,7 +87,6 @@ class TestRunCmd:
 
     @patch("mhpy.utils.subprocess.subprocess.run")
     def test_run_cmd_text_mode(self, mock_run):
-        """Test that run_cmd uses text mode."""
         command = "echo test"
         error_msg = "Error"
 
@@ -105,20 +98,20 @@ class TestRunCmd:
 
     @patch("mhpy.utils.subprocess.logger")
     @patch("mhpy.utils.subprocess.subprocess.run")
-    @patch("mhpy.utils.subprocess.sys.exit")
-    def test_run_cmd_empty_stderr(self, mock_exit, mock_run, mock_logger):
+    def test_run_cmd_empty_stderr(self, mock_run, mock_logger):
         command = "false"
         error_msg = "Command failed"
 
         mock_run.side_effect = subprocess.CalledProcessError(returncode=1, cmd=command, stderr="")
 
-        run_cmd(command, error_msg)
+        with pytest.raises(subprocess.CalledProcessError):
+            run_cmd(command, error_msg)
 
-        mock_logger.error.assert_called_once()
-        mock_exit.assert_called_once_with(1)
+        mock_logger.error.assert_called_once_with(f"Error - {error_msg}")
 
+    @patch("mhpy.utils.subprocess.logger")
     @patch("mhpy.utils.subprocess.subprocess.run")
-    def test_run_cmd_logs_command(self, mock_run):
+    def test_run_cmd_logs_command(self, mock_run, mock_logger):
         command = "custom_command --flag value"
         error_msg = "Error"
 
