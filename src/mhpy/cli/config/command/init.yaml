@@ -4,6 +4,11 @@ python_version: "3.12"
 
 name: init
 
+run:
+  code_privacy_confirmation: true
+  remote_url_prompt: true
+
+
 python_submodules:
   - data
   - train

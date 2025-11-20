@@ -32,10 +32,11 @@ def _assert_no_code_leakage(package_name: str) -> None:
             logger.info("Try again...")
 
 
-def _prompting(package_game: str) -> dict:
-    _assert_no_code_leakage(package_game)
+def _prompting(package_game: str, cfg: DictConfig) -> dict:
+    if cfg.run.code_privacy_confirmation:
+        _assert_no_code_leakage(package_game)
 
-    remote_url = input("🔗 Enter remote repository URL (Enter to skip): ").strip()
+    remote_url = input("🔗 Enter remote repository URL (Enter to skip): ").strip() if cfg.run.remote_url_prompt else None
 
     return {"remote_url": remote_url}
 
@@ -178,7 +179,7 @@ def init(cfg: DictConfig) -> None:
     project_root = Path.cwd()
     package_root = project_root / "src" / package_name
 
-    info = _prompting(package_name)
+    info = _prompting(package_name, cfg)
 
     logger.info(f"🚀 Starting new ML project '{package_name}'...")
     _git(project_root, info["remote_url"])
