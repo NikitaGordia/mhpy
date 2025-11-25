@@ -4,15 +4,14 @@ import shutil
 import uuid
 
 from jinja2 import Environment
-from jinja2 import FileSystemLoader
+from jinja2 import PackageLoader
 from jinja2 import StrictUndefined
 from loguru import logger
 from omegaconf import DictConfig
 
 from mhpy.utils.subprocess import run_cmd
 
-TEMPLATE_DIR = Path(__file__).parent.parent / "templates"
-jinja_env = Environment(loader=FileSystemLoader(TEMPLATE_DIR), undefined=StrictUndefined, keep_trailing_newline=True)
+jinja_env = Environment(loader=PackageLoader("mhpy.cli", "templates"), undefined=StrictUndefined, keep_trailing_newline=True)
 
 
 def create_file_from_template(filepath: Path, template_name: str, replacements: dict = {}) -> None:
@@ -135,7 +134,12 @@ def _makefile(project_root: Path, package_name: str, hydra_submodule: str) -> No
 def _hydra_configs(package_root: Path, cfg: DictConfig) -> None:
     logger.info("Creating default hydra configs...")
     hydra_dir = package_root / cfg.hydra.submodule
+
+    hydra_dir.mkdir(parents=True, exist_ok=True)
+    (hydra_dir / "__init__.py").touch()
+
     create_file_from_template(hydra_dir / "config.yaml", "hydra_config.yaml.jinja")
+
     for dir in cfg.hydra.configs:
         (hydra_dir / dir).mkdir(exist_ok=True)
         (hydra_dir / dir / "default.yaml").touch()
