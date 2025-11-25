@@ -134,7 +134,12 @@ def _makefile(project_root: Path, package_name: str, hydra_submodule: str) -> No
 def _hydra_configs(package_root: Path, cfg: DictConfig) -> None:
     logger.info("Creating default hydra configs...")
     hydra_dir = package_root / cfg.hydra.submodule
+
+    hydra_dir.mkdir(parents=True, exist_ok=True)
+    (hydra_dir / "__init__.py").touch()
+
     create_file_from_template(hydra_dir / "config.yaml", "hydra_config.yaml.jinja")
+
     for dir in cfg.hydra.configs:
         (hydra_dir / dir).mkdir(exist_ok=True)
         (hydra_dir / dir / "default.yaml").touch()

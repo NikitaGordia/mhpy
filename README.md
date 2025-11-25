@@ -66,13 +66,27 @@ cd mhpy
 pip install uv  # if you don't have it
 uv sync --all-extras
 ```
+Install changes with:
+```bash
+uv run pip install -e ".[all]"
+# or
+make reinstall
+```
+Run in `debug` mode:
+```bash
+mhpy command=init_no_prompts command.package_name=mlproj command.debug=true
+```
+Clean test directory:
+```bash
+find . -mindepth 1 -delete # Be careful!
+```
 
 ## Usage
 
 ### Initialize a new ML project
 
 ```bash
-mhpy package_name=my_awesome_project
+mhpy command.package_name=myproj
 ```
 
 This will scaffold a complete project with:
